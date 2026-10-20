@@ -1,0 +1,11 @@
+# generated or downloaded (not in git)
+data/
+checkpoints/
+traces/
+figures/
+# Python and Mac
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+.DS_Store

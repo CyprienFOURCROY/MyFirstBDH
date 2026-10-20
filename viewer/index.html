@@ -1,0 +1,1153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BDH graph - training</title>
+<style>
+  :root { --bg:#f7f7f5; --card:#ffffff; --fg:#1d1d1f; --muted:#6b6b70; --line:#e2e2de; --hover:#f0f0ec; --sel:#e8f0fe;
+          --ref:#8a8a90; --ok:#2b8a3e; --wait:#b08900; --bad:#c92a2a;
+          --c0:#2f6fdb; --c1:#d9480f; --c2:#2b8a3e; --c3:#7048e8; --c4:#0b7285; --c5:#c2255c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#161618; --card:#202024; --fg:#ececee; --muted:#9a9aa2; --line:#33333a; --hover:#2a2a2f; --sel:#25324a;
+            --ref:#8a8a92; --ok:#6fcf7f; --wait:#e0b84a; --bad:#ff8787;
+            --c0:#6ea0ff; --c1:#ff9a5c; --c2:#6fcf7f; --c3:#a58bff; --c4:#3bc9db; --c5:#f783ac; } }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px 16px; background:var(--bg); color:var(--fg);
+         font:15px/1.5 -apple-system, system-ui, "Segoe UI", sans-serif; }
+  main { max-width:960px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 16px; font-weight:600; }
+  h2 { font-size:14px; margin:0 0 8px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:16px; }
+  .pill { font-size:12px; padding:1px 9px; border-radius:999px; border:1px solid var(--line); white-space:nowrap; }
+  .pill.live { color:var(--ok); border-color:var(--ok); }
+  .pill.stopped { color:var(--bad); border-color:var(--bad); }
+  .pill.finished { color:var(--muted); }
+  .top { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .top label { font-size:13px; color:var(--muted); cursor:pointer; }
+  .tablewrap { overflow-x:auto; max-height:230px; overflow-y:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums; }
+  th { text-align:left; color:var(--muted); font-weight:500; padding:4px 8px; position:sticky; top:0; background:var(--card); }
+  td { padding:5px 8px; border-top:1px solid var(--line); white-space:nowrap; }
+  tr.run { cursor:pointer; }
+  tr.run:hover { background:var(--hover); }
+  tr.run.primary { background:var(--sel); }
+  .swatch { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  .bar { height:6px; background:var(--line); border-radius:3px; margin:0 0 12px; overflow:hidden; }
+  .bar > div { height:100%; width:0; background:var(--c0); transition:width .3s; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; }
+  .card .label { font-size:12px; color:var(--muted); }
+  .card .value { font-size:22px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .card .sub { font-size:12px; color:var(--muted); }
+  #chart { width:100%; height:420px; }
+  p.help { color:var(--muted); font-size:13px; margin:4px 2px 0; }
+  code { background:var(--line); padding:1px 5px; border-radius:4px; }
+  #empty { display:none; }
+  details.panel > summary { cursor:pointer; font-weight:600; font-size:14px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .form { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px 14px; margin:12px 0; }
+  .form label { display:flex; flex-direction:column; font-size:12px; color:var(--muted); gap:2px; }
+  .form input[type=number], .form select { width:100%; }
+  input[type=number] { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:6px 8px; }
+  .form .check { flex-direction:row; align-items:center; gap:6px; margin-top:16px; }
+  #cmd { font:12px ui-monospace, Menlo, monospace; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:8px 10px; word-break:break-all; }
+  .actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  button.secondary { background:var(--bg); color:var(--fg); border-color:var(--line); font-weight:500; }
+  #launch-msg { font-size:13px; }
+  #launch-msg.err { color:var(--bad); } #launch-msg.ok { color:var(--ok); }
+  #drawer-tab { position:fixed; right:0; top:42%; z-index:15; border-radius:8px 0 0 8px; writing-mode:vertical-rl; padding:14px 8px; }
+  #drawer { position:fixed; top:0; right:0; height:100vh; width:470px; max-width:100vw; background:var(--card); border-left:1px solid var(--line);
+            z-index:20; transform:translateX(105%); transition:transform .25s, width .25s; overflow-y:auto; padding:12px 14px; box-shadow:-6px 0 24px rgba(0,0,0,.12); }
+  #drawer.open { transform:none; }
+  #grip { position:absolute; left:0; top:0; bottom:0; width:7px; cursor:ew-resize; z-index:2; }
+  #grip:hover, #grip.drag { background:var(--c0); opacity:.35; }
+  body.drawer-open { transition:padding .25s; }
+  body.resizing, body.resizing * { user-select:none; cursor:ew-resize !important; } body.resizing #drawer { transition:none; }
+  .dhead { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  .dhead .spacer { flex:1; }
+  .dtabs { display:flex; gap:6px; margin-bottom:10px; }
+  .dtab { background:var(--bg); color:var(--fg); border-color:var(--line); font-weight:500; }
+  .dtab.active { background:var(--c0); color:#fff; border-color:var(--c0); }
+  #wgrid { display:grid; grid-template-columns:1fr; gap:12px; }
+  #drawer.cols2 #wgrid { grid-template-columns:1fr 1fr; }
+  #flow-grid { display:grid; grid-template-columns:1fr; gap:10px; }
+  #drawer.cols2 #flow-grid { grid-template-columns:1.7fr 1fr; align-items:start; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:12px; color:var(--muted); margin-bottom:8px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:-1px; }
+  .legend i.line { border-radius:2px; height:4px; width:16px; vertical-align:2px; }
+  #fl-letters { display:flex; flex-wrap:wrap; gap:3px; margin:4px 0 8px; }
+  .lt { display:inline-flex; flex-direction:column; align-items:center; line-height:1.15; font:16px ui-monospace, Menlo, monospace; min-width:14px; padding:0 2px; background:transparent; color:var(--fg); border:0; border-radius:4px; font-weight:400; }
+  .lt .pc { font-size:10px; font-weight:700; }
+  .lt .pc.ok { color:var(--ok); } .lt .pc.bad { color:var(--bad); } .lt .pc.q { color:var(--c3); }
+  #fl-pred { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:8px 0; background:var(--bg); }
+  #fl-pred .prob { grid-template-columns:90px 1fr 54px; }
+  #fl-pred .prob.true .fill { background:var(--ok); } #fl-pred .prob.true .name { color:var(--ok); font-weight:700; }
+  #fl-pred .fill { background:var(--c3); }
+  #fl-pred button { margin-top:6px; }
+  .lt.gen { background:rgba(124,58,237,.12); outline:1px dashed var(--c3); }
+  .lt.now.gen { background:var(--c3); }
+  .lt.sep { margin-left:10px; }
+  #fl-split { font-size:13px; line-height:1.6; margin:6px 0 2px; }
+  #fl-split .tag { font-size:11px; font-weight:700; padding:1px 7px; border-radius:999px; color:#fff; }
+  #fl-split .tag.p { background:var(--c0); } #fl-split .tag.g { background:var(--c3); }
+  #fl-split code { font-size:13px; }
+  .lt.done { color:var(--fg); }
+  .lt.now { background:var(--c0); color:#fff; font-weight:700; padding:0 5px; }
+  .lt.next { color:var(--muted); opacity:.45; }
+  #fl-where { font-size:13px; line-height:1.5; margin:8px 0 4px; padding:6px 10px; background:var(--bg); border:1px solid var(--line); border-radius:8px; }
+  #fl-ruler { display:flex; flex-wrap:wrap; gap:8px; margin:4px 0 8px; }
+  .rgroup { border:1px solid var(--line); border-radius:8px; padding:4px 6px; }
+  .rgroup .gl { font-size:11px; color:var(--muted); margin-bottom:3px; }
+  .rcells { display:flex; gap:3px; }
+  .rcell { min-width:54px; padding:3px 4px; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px; font-size:11px; line-height:1.3; font-weight:400; text-align:center; }
+  .rcell b { display:block; font-size:12px; }
+  .rcell.done { opacity:.55; }
+  .rcell.active { background:var(--c2); color:#fff; border-color:var(--c2); opacity:1; }
+  #fl-cycle svg { width:100%; max-width:340px; display:block; margin:0 0 6px; }
+  #fl-cycle text { fill:var(--muted); font:10px -apple-system, system-ui, sans-serif; }
+  #fl-cycle text.on { fill:var(--fg); font-weight:700; }
+  #fl-cycle text.node { fill:#fff; font-size:13px; font-weight:700; text-anchor:middle; }
+  .rounds { display:flex; gap:4px; flex-wrap:wrap; }
+  #fl-plot { width:100%; height:400px; }
+  #fl-text { font-size:14px; line-height:1.5; margin-bottom:8px; }
+  #fl-top { font:12px/1.55 ui-monospace, Menlo, monospace; color:var(--fg); }
+  #fl-top .push { color:var(--c2); } #fl-top .pull { color:var(--c5); } #fl-top .mem { color:var(--c4); }
+  .wcell .stat { font-size:12px; color:var(--muted); }
+  #g3d { width:100%; height:480px; } #drawer.wide #g3d { height:640px; }
+  .row { display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:10px; font-size:13px; color:var(--muted); }
+  select, input[type=text], button { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:6px 10px; }
+  input[type=text] { width:100%; font-family:ui-monospace, Menlo, monospace; font-size:15px; }
+  input[type=text].bad { border-color:var(--bad); }
+  button { cursor:pointer; background:var(--c0); color:#fff; border-color:var(--c0); font-weight:600; }
+  button:disabled { opacity:.5; cursor:default; }
+  .inputrow { display:flex; gap:8px; }
+  .err { color:var(--bad); font-size:13px; min-height:20px; margin:4px 0; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 10px; }
+  .chip { font:13px ui-monospace, Menlo, monospace; padding:2px 9px; border:1px solid var(--line); border-radius:999px;
+          background:var(--bg); color:var(--fg); cursor:pointer; font-weight:400; }
+  .chip:hover { background:var(--hover); }
+  .chip.example { font-family:inherit; }
+  .small { font-size:12px; color:var(--muted); margin:8px 0 2px; }
+  #result { margin-top:12px; display:none; }
+  #answer { font:15px/1.6 ui-monospace, Menlo, monospace; padding:10px 12px; border:1px solid var(--line); border-radius:8px; word-break:break-word; }
+  #answer .gen { color:var(--c3); font-weight:700; }
+  #answer .end { color:var(--muted); font-size:12px; }
+  #verdict { font-size:13px; margin:6px 0; }
+  #verdict.ok { color:var(--ok); } #verdict.no { color:var(--bad); }
+  .prob { display:grid; grid-template-columns:100px 1fr 50px; gap:8px; align-items:center; font-size:13px; margin:2px 0; }
+  .prob .track { background:var(--line); border-radius:3px; height:10px; overflow:hidden; }
+  .prob .fill { background:var(--c0); height:100%; }
+  .prob .name { font-family:ui-monospace, Menlo, monospace; text-align:right; }
+  .note { color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>BDH graph: training</h1>
+
+  <div id="empty" class="panel">
+    <b>No runs yet.</b> Start one in a terminal: <code>python -m scripts.train --steps 200</code>.
+    This page picks it up by itself.
+  </div>
+
+  <details class="panel" id="launch">
+    <summary>Start a new run</summary>
+    <div class="form">
+      <label>steps<input type="number" id="f-steps"></label>
+      <label>learning rate<input type="number" id="f-lr" step="any"></label>
+      <label>data level<select id="f-level"></select></label>
+      <label>neurons n<input type="number" id="f-n"></label>
+      <label>layers L<input type="number" id="f-L"></label>
+      <label>memory decay u<input type="number" id="f-u" step="any"></label>
+      <label>batch<input type="number" id="f-batch"></label>
+      <label>seed<input type="number" id="f-seed"></label>
+      <label>memory mask Gs<select id="f-gs"><option>dense</option><option>random</option></select></label>
+      <label>Gs density (random)<input type="number" id="f-gs_density" step="any"></label>
+      <label class="check"><input type="checkbox" id="f-norm_a"> normalize a</label>
+    </div>
+    <div id="cmd"></div>
+    <p class="help" id="estimate"></p>
+    <div class="actions">
+      <button id="start">Start run</button>
+      <button id="stop" class="secondary" disabled>Stop run</button>
+      <button class="chip" id="preset-tiny">preset TINY (n=128)</button>
+      <button class="chip" id="preset-small">preset SMALL (n=256)</button>
+      <span id="launch-msg"></span>
+    </div>
+    <p class="help">The page runs this command for you as a separate process. Closing the dashboard does not stop the training. It saves its weights as it goes.</p>
+  </details>
+
+  <div class="panel" id="runs-panel">
+    <div class="top">
+      <h2>Runs (newest first)</h2>
+      <label><input type="checkbox" id="follow" checked> when a new run starts, show it</label>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th title="draw on the chart">show</th><th>run</th><th>lr</th><th>steps</th><th>train loss</th><th>best val</th><th>status</th></tr></thead>
+        <tbody id="runs"></tbody>
+      </table>
+    </div>
+    <p class="help">Click a row to look at that run (cards below). Only ticked runs are drawn: untick a run to hide it, tick several to compare.</p>
+  </div>
+
+  <div class="bar"><div id="progress"></div></div>
+  <div class="cards">
+    <div class="card"><div class="label">step</div><div class="value" id="c-step">-</div><div class="sub" id="c-total">&nbsp;</div></div>
+    <div class="card"><div class="label">train loss (avg of last 10)</div><div class="value" id="c-train">-</div><div class="sub" id="c-last">&nbsp;</div></div>
+    <div class="card"><div class="label">val loss</div><div class="value" id="c-val">-</div><div class="sub" id="c-best">&nbsp;</div></div>
+    <div class="card"><div class="label">speed</div><div class="value" id="c-speed">-</div><div class="sub" id="c-eta">&nbsp;</div></div>
+  </div>
+
+  <div class="panel">
+    <div id="chart"></div>
+    <p class="help">
+      Loss = how surprised the model is by the next letter (lower is better). Dashed grey line: random guess, ln(256) = 5.55.
+      Val loss is measured on stories the model never trained on.
+      With several runs: solid line = train loss (average of last 10 steps), dashed line with dots = val loss.
+    </p>
+  </div>
+
+  <div class="panel" id="try">
+    <h2>Try a model</h2>
+    <div class="row">
+      <label>model <select id="model"></select></label>
+      <label title="Gs = 0: the model only sees the current letter"><input type="checkbox" id="memory" checked> memory on (untick = memory off, Gs = 0)</label>
+    </div>
+    <div id="no-model" class="note">No saved model yet. Start a run (<code>python -m scripts.train --steps 300</code>): its weights are saved next to its log.</div>
+    <div id="try-body" style="display:none">
+      <div class="small">Examples from stories the model never trained on (click to load, the answer is hidden):</div>
+      <div class="chips" id="examples"></div>
+      <div class="inputrow">
+        <input type="text" id="prompt" autocomplete="off" spellcheck="false" placeholder="type a story start, e.g. tom has a red ball. ana has a blue ball. tom's ball is ">
+        <button id="go-one" title="the model writes one more letter into the text">Next letter</button>
+        <button id="go" title="the model writes letters until the end of the story (Enter)">Complete all</button>
+      </div>
+      <div class="err" id="err"></div>
+      <button class="chip" id="go-reset" style="display:none">remove the model's letters</button>
+      <div class="small" id="sugg-label">Words (click to add):</div>
+      <div class="chips" id="sugg"></div>
+      <div class="chips" id="symbols"></div>
+      <div id="result">
+        <div id="answer"></div>
+        <div id="verdict"></div>
+        <div class="small">Most likely next letter</div>
+        <div id="probs"></div>
+        <div class="small" id="which"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<button id="drawer-tab" title="open the networks window">&#9664; Networks</button>
+<aside id="drawer">
+  <div id="grip" title="drag to resize"></div>
+  <div class="dhead">
+    <b>Networks</b>
+    <select id="d-model"></select>
+    <select id="d-layout" title="how the graphs are laid out"><option value="1">1 column</option><option value="2">2 columns</option></select>
+    <span class="spacer"></span>
+    <button class="chip" id="drawer-wide">expand &#10530;</button>
+    <button class="chip" id="drawer-full" title="the window fills the whole screen (Esc to leave)">full &#9974;</button>
+    <button class="chip" id="drawer-close">close &#10005;</button>
+  </div>
+  <div class="dtabs">
+    <button class="dtab active" data-tab="flow">Letter flow</button>
+    <button class="dtab" data-tab="acts">Activations</button>
+    <button class="dtab" data-tab="weights">Weights</button>
+    <button class="dtab" data-tab="graph">3D graph</button>
+  </div>
+  <div id="d-empty" class="note">No saved model yet. Start a run above: its weights are saved as it trains.</div>
+
+  <div id="tab-flow" class="tab">
+    <div class="legend">
+      <span><i style="background:var(--c0)"></i>X(i): neuron activity</span>
+      <span><i style="background:var(--c1)"></i>Y(i): what pushes</span>
+      <span><i style="background:var(--c3)"></i>A(i): what the memory returns</span>
+      <span><i class="line" style="background:var(--c2)"></i>push (+)</span>
+      <span><i class="line" style="background:var(--c5)"></i>pull (&minus;)</span>
+      <span><i class="line" style="background:var(--c4)"></i>new memory link</span>
+    </div>
+    <div class="row">
+      <label>layer <select id="fl-layer"></select></label>
+      <label>wires shown <input type="range" id="fl-k" min="5" max="150" step="5" value="30"> <b id="fl-kval">30</b></label>
+      <label title="the paper's Table 1 numbers the rounds differently from the order the code runs them">round numbers
+        <select id="fl-num"><option value="exec">in running order: 4l, 4l+1, 4l+2, 4l+3</option><option value="table">as in CLAUDE.md (push X = 4l+3, read = 4l, ...)</option></select></label>
+    </div>
+    <div id="fl-where"></div>
+    <div class="small">The text: <b>black</b> = already read, <b style="color:var(--c0)">blue</b> = the letter thrown now, <span style="opacity:.5">faded</span> = not read yet. Letters in a <span style="outline:1px dashed var(--c3);padding:0 3px">dashed purple box</span> were written by the model, the others are your prompt. Click a letter to throw it.<br>The small letter under each one is what the model predicts <b>next</b> after reading it: <b style="color:var(--ok)">green</b> = right, <b style="color:var(--bad)">red</b> = wrong, <b style="color:var(--c3)">purple</b> = the open question at the end of the text.</div>
+    <div id="fl-split"></div>
+    <div id="fl-letters"></div>
+    <div class="small">The 4 rounds of each layer, in the order the code runs them (click one). Keys: &larr; &rarr; step, space = play.</div>
+    <div id="fl-ruler"></div>
+    <div class="actions">
+      <button class="chip" id="fl-prev" title="previous round (left arrow)">&#9664; back</button>
+      <button class="chip" id="fl-next" title="next round (right arrow)">next &#9654;</button>
+      <button class="chip" id="fl-play">&#9654; play</button>
+      <span id="fl-msg" class="note"></span>
+    </div>
+    <div id="flow-grid">
+      <div id="fl-plot"></div>
+      <div><div id="fl-cycle"></div><div id="fl-text"></div><div id="fl-pred"></div><div id="fl-top"></div></div>
+    </div>
+    <p class="help">One layer, one letter, round by round. Neuron i sits at position i in each row; a bigger, brighter dot means a larger value.
+      Green lines push a neuron up, red lines pull it down (a neuron pulled below zero is cut to 0 by the ReLU, shown as a red ring).
+      Only the strongest wires of the round are drawn.</p>
+  </div>
+
+  <div id="tab-weights" class="tab" style="display:none">
+    <p class="help">The 4 wires the model learned. Row = the neuron that receives, column = the neuron that sends
+      (<code>G @ y</code> reads row j as: neuron j receives from every column i). Bright = strong wire.
+      Excitatory (_e) pushes up, inhibitory (_i) pushes down; the model uses their difference.</p>
+    <div id="wgrid"></div>
+  </div>
+
+  <div id="tab-graph" class="tab" style="display:none">
+    <div class="row">
+      <label>wires <select id="g-mat">
+        <option value="Gx_e">Gx_e (Y→X, excites)</option><option value="Gx_i">Gx_i (Y→X, inhibits)</option>
+        <option value="Gy_e">Gy_e (A→Y, excites)</option><option value="Gy_i">Gy_i (A→Y, inhibits)</option></select></label>
+      <label>strongest wires shown <input type="range" id="g-k" min="20" max="1500" step="10" value="200"> <b id="g-kval">200</b></label>
+    </div>
+    <div id="g3d"></div>
+    <p class="help">Each point is a neuron (placed evenly on a sphere: the position means nothing, only the wires do).
+      A line joins a sender to a receiver; only the strongest ones are drawn. Big points have many strong wires.
+      Drag to rotate, scroll to zoom.</p>
+  </div>
+
+  <div id="tab-acts" class="tab" style="display:none">
+    <div class="row">
+      <label>show <select id="a-what">
+        <option value="x">x: neurons that fire for each letter</option>
+        <option value="a">a: what the memory returns</option>
+        <option value="y">y: what A pushes back into Y</option></select></label>
+      <label>layer <select id="a-layer"></select></label>
+      <label title="the memory sigma at the end of the text, rows = from i, columns = to j">memory layer <select id="a-slayer"></select></label>
+    </div>
+    <div class="actions"><button id="a-run">Show for the text in "Try a model"</button><span id="a-msg" class="note"></span></div>
+    <div id="a-letters" class="note" style="margin:6px 0"></div>
+    <div id="a-heat"></div>
+    <div id="a-active"></div>
+    <div id="a-sigma"></div>
+    <p class="help">One row per letter of the text, one column per neuron. A bright cell means that neuron is active at that letter.
+      The bar chart counts how many neurons are active (x &gt; 0) per letter. The last picture is the memory sigma after the whole text.</p>
+  </div>
+</aside>
+
+<script src="/plotly.min.js"></script>
+<script>
+const RANDOM_GUESS = Math.log(256);
+const WINDOW = 10;
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 3) => (v === undefined || v === null || Number.isNaN(v)) ? "-" : v.toFixed(d);
+const clock = s => { s = Math.round(s); const m = Math.floor(s / 60); return m + "m " + String(s % 60).padStart(2, "0") + "s"; };
+
+let runs = [];                // summaries from /runs, newest first
+let selected = new Set();     // runs drawn on the chart
+let primary = null;           // the run shown in the cards
+let follow = true;            // when a new run starts, show it
+let knownIds = null;          // run ids seen so far, to spot a new run
+const colorOf = {};           // run id -> 0..5, stays the same while the page is open
+const records = {};           // run id -> records from /data
+let runsKey = "";
+
+function pickColor(id) {
+  if (id in colorOf) return;
+  const used = new Set(Object.values(colorOf));
+  let c = 0;
+  while (used.has(c) && c < 5) c++;
+  colorOf[id] = c;
+}
+
+function movingAverage(ys, w) {
+  return ys.map((_, i) => {
+    const part = ys.slice(Math.max(0, i - w + 1), i + 1);
+    return part.reduce((a, b) => a + b, 0) / part.length;
+  });
+}
+
+function prettyName(id) { return id.replace("_", " ").replace(/-/g, (m, i) => i > 9 ? ":" : "-"); }
+
+function renderRuns() {
+  $("empty").style.display = runs.length ? "none" : "block";
+  $("runs-panel").style.display = runs.length ? "block" : "none";
+  $("runs").innerHTML = runs.map(r => {
+    const dot = selected.has(r.id) ? `<span class="swatch" style="background:var(--c${colorOf[r.id]})"></span>` : "";
+    return `<tr class="run ${r.id === primary ? "primary" : ""}" data-id="${r.id}">
+      <td><input type="checkbox" data-show="${r.id}" ${selected.has(r.id) ? "checked" : ""}></td>
+      <td>${dot}${prettyName(r.id)}</td>
+      <td>${r.lr ?? "-"}</td>
+      <td>${r.steps_done} / ${r.steps_total ?? "?"}</td>
+      <td>${fmt(r.train)}</td><td>${fmt(r.best_val)}</td>
+      <td><span class="pill ${r.status}">${r.status}</span></td></tr>`;
+  }).join("");
+}
+
+function renderCards() {
+  const recs = records[primary] || [];
+  const start = recs.find(r => r.type === "start");
+  const steps = recs.filter(r => r.type === "step");
+  const vals = recs.filter(r => r.type === "val");
+  const summary = runs.find(r => r.id === primary);
+  const show = selected.has(primary) && start && summary;  // a run you did not tick stays hidden
+  document.querySelector(".bar").style.display = show ? "block" : "none";
+  document.querySelector(".cards").style.display = show ? "grid" : "none";
+  if (!show) return;
+
+  const last = steps[steps.length - 1];
+  const total = start.steps;
+  const stepNow = last ? last.step + 1 : 0;
+  const recent = steps.slice(-WINDOW);
+  const trainAvg = recent.reduce((a, r) => a + r.loss, 0) / Math.max(1, recent.length);
+  const speed = last && last.elapsed > 0 ? stepNow / last.elapsed : 0;
+
+  $("progress").style.width = (100 * stepNow / total) + "%";
+  $("c-step").textContent = stepNow;
+  $("c-total").textContent = "of " + total;
+  $("c-train").textContent = fmt(trainAvg);
+  $("c-last").textContent = last ? "last step: " + fmt(last.loss) : " ";
+  if (vals.length) {
+    const best = Math.min(...vals.map(v => v.loss));
+    $("c-val").textContent = fmt(vals[vals.length - 1].loss);
+    $("c-best").textContent = "best: " + fmt(best) + " (step " + (vals.find(v => v.loss === best).step + 1) + ")";
+  } else { $("c-val").textContent = "-"; $("c-best").textContent = " "; }
+  $("c-speed").textContent = speed ? fmt(speed, 1) + " step/s" : "-";
+  $("c-eta").textContent = summary.status === "finished" ? "took " + clock(last.elapsed)
+    : summary.status === "stopped" ? "no update for 30 s: stopped?"
+    : (speed ? "about " + clock((total - stepNow) / speed) + " left" : " ");
+}
+
+function renderChart() {
+  const ids = runs.map(r => r.id).filter(id => selected.has(id) && records[id]);
+  const single = ids.length === 1;
+  const traces = [];
+  let xMax = ids.length ? 1 : 100;
+  for (const id of ids) {
+    const recs = records[id];
+    const start = recs.find(r => r.type === "start");
+    const steps = recs.filter(r => r.type === "step");
+    const vals = recs.filter(r => r.type === "val");
+    if (start) xMax = Math.max(xMax, start.steps);
+    const x = steps.map(r => r.step + 1);
+    const name = prettyName(id);
+    const trainColor = css("--c" + (single ? 0 : colorOf[id]));
+    const valColor = css("--c" + (single ? 1 : colorOf[id]));
+    if (single) {
+      traces.push({ x, y: steps.map(r => r.loss), name: "train loss (each step)", mode: "lines",
+        line: { color: trainColor, width: 1 }, opacity: 0.35, hovertemplate: "step %{x}: %{y:.3f}<extra>train</extra>" });
+    }
+    traces.push({ x, y: movingAverage(steps.map(r => r.loss), WINDOW), mode: "lines",
+      name: single ? "train loss (average of last " + WINDOW + ")" : name + " train",
+      line: { color: trainColor, width: 3 }, hovertemplate: "step %{x}: %{y:.3f}<extra>" + name + " train</extra>" });
+    traces.push({ x: vals.map(v => v.step + 1), y: vals.map(v => v.loss), mode: "lines+markers",
+      name: single ? "val loss" : name + " val",
+      line: { color: valColor, width: 2, dash: single ? "solid" : "dash" }, marker: { size: 7 },
+      hovertemplate: "step %{x}: %{y:.3f}<extra>" + name + " val</extra>" });
+  }
+  const layout = {
+    margin: { l: 50, r: 16, t: 10, b: 90 },
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: css("--fg") },
+    xaxis: { title: "training step", range: [0, xMax], gridcolor: css("--line") },
+    yaxis: { title: "loss", gridcolor: css("--line"), rangemode: "tozero" },
+    legend: { orientation: "h", y: -0.25 },
+    shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: RANDOM_GUESS, y1: RANDOM_GUESS,
+               line: { color: css("--ref"), dash: "dash", width: 1 } }],
+    annotations: (ids.length ? [] : [{ xref: "paper", yref: "paper", x: 0.5, y: 0.5, showarrow: false,
+                    text: "tick a run in the table to draw it", font: { size: 14, color: css("--muted") } }]).concat([{ xref: "paper", x: 1, y: RANDOM_GUESS, text: "random guess 5.55", showarrow: false,
+                    xanchor: "right", yanchor: "bottom", font: { size: 11, color: css("--ref") } }]),
+  };
+  Plotly.react("chart", traces, layout, { displayModeBar: false, responsive: true });
+}
+
+async function tick() {
+  try {
+    runs = await (await fetch("/runs")).json();
+    if (runs.length) {
+      const ids = runs.map(r => r.id);
+      if (knownIds === null) { primary = ids[0]; selected = new Set([primary]); }       // first load: the newest run
+      else if (follow && ids.some(id => !knownIds.has(id))) { primary = ids[0]; selected.add(primary); }  // a new run started
+      knownIds = new Set(ids);
+      if (!ids.includes(primary)) primary = ids[0];
+      selected = new Set([...selected].filter(id => ids.includes(id)));
+      [...selected].forEach(pickColor);
+      await Promise.all([...selected].map(async id => { records[id] = await (await fetch("/data?run=" + id)).json(); }));
+    }
+    const key = JSON.stringify(runs) + primary + [...selected];
+    if (key !== runsKey) { runsKey = key; renderRuns(); }
+    $("chart").parentElement.style.display = runs.length ? "block" : "none";
+    if (!runs.length) { document.querySelector(".bar").style.display = "none"; document.querySelector(".cards").style.display = "none"; }
+    if (runs.length) { renderCards(); renderChart(); }
+    updateModels();
+    const st = await (await fetch("/status")).json();
+    $("start").disabled = st.running; $("stop").disabled = !st.running;
+  } catch (e) { /* server not reachable: try again */ }
+}
+
+$("runs").addEventListener("click", e => {
+  const show = e.target.dataset.show;
+  if (show) {  // a checkbox: draw or hide this run
+    if (e.target.checked) { selected.add(show); pickColor(show); } else selected.delete(show);
+    renderRuns();
+  } else {     // a row: look at this run
+    const row = e.target.closest("tr.run");
+    if (!row) return;
+    primary = row.dataset.id;
+    selected.add(primary); pickColor(primary);
+    follow = primary === runs[0].id && $("follow").checked;
+    $("follow").checked = follow;
+  }
+  runsKey = ""; tick();
+});
+$("follow").addEventListener("change", e => { follow = e.target.checked; tick(); });
+
+// ---------- try a model ----------
+let tryInfo = null;        // allowed characters, words, examples of the chosen model
+let tryRun = null;         // run id of the chosen model
+let expected = null;       // the right answer, when the prompt comes from an example
+let typedOk = "";          // the last text without forbidden characters
+
+function updateModels() {
+  const withModel = runs.filter(r => r.has_model);
+  const key = withModel.map(r => r.id).join();
+  const sel = $("model");
+  if (sel.dataset.key !== key) {
+    const keep = sel.value;
+    const options = withModel.map(r => `<option value="${r.id}">${prettyName(r.id)} (n ${r.n}, L ${r.L}, lr ${r.lr}, ${r.steps_total} steps)</option>`).join("");
+    ["model", "d-model"].forEach(id => { $(id).innerHTML = options; $(id).dataset.key = key; });
+    if (withModel.some(r => r.id === keep)) { $("model").value = keep; $("d-model").value = keep; }
+  }
+  $("no-model").style.display = withModel.length ? "none" : "block";
+  $("try-body").style.display = withModel.length ? "block" : "none";
+  $("d-empty").style.display = withModel.length ? "none" : "block";
+  if (withModel.length && $("model").value !== tryRun) setModel($("model").value);
+}
+
+function setModel(runId) {
+  $("model").value = runId; $("d-model").value = runId;
+  $("result").style.display = "none";
+  loadInfo(runId);
+  if (drawer.classList.contains("open")) showTab(currentTab);
+}
+
+async function loadInfo(runId) {
+  tryRun = runId;
+  tryInfo = await (await fetch("/info?run=" + runId)).json();
+  $("prompt").maxLength = tryInfo.max_prompt;
+  $("examples").innerHTML = "";
+  tryInfo.examples.forEach((ex, i) => {
+    const b = document.createElement("button");
+    b.className = "chip example"; b.textContent = ex.prompt.length > 34 ? ex.prompt.slice(0, 34) + "…" : ex.prompt;
+    b.title = ex.prompt; b.onclick = () => { genPrompt = null; $("prompt").value = ex.prompt; typedOk = ex.prompt; expected = ex.answer; showError(""); renderSuggestions(); };
+    $("examples").appendChild(b);
+  });
+  $("symbols").innerHTML = "";
+  [...tryInfo.allowed].filter(c => !/[a-z ]/.test(c)).forEach(c => {
+    const b = document.createElement("button");
+    b.className = "chip"; b.textContent = c; b.title = "add " + c; b.onclick = () => insertText(c);
+    $("symbols").appendChild(b);
+  });
+  renderSuggestions();
+}
+
+function showError(msg) { $("err").textContent = msg; $("prompt").classList.toggle("bad", !!msg); }
+
+function insertText(text) {
+  const input = $("prompt");
+  input.value += text; typedOk = input.value; expected = null; showError(""); renderSuggestions(); input.focus();
+}
+
+function renderSuggestions() {
+  if (!tryInfo) return;
+  const prefix = ($("prompt").value.match(/[a-z]*$/) || [""])[0];
+  const matches = tryInfo.words.filter(w => w.startsWith(prefix));
+  $("sugg-label").textContent = prefix ? `Words starting with "${prefix}" (click to complete):` : "Words (click to add):";
+  $("sugg").innerHTML = "";
+  matches.forEach(w => {
+    const b = document.createElement("button");
+    b.className = "chip"; b.textContent = w;
+    b.onclick = () => { genPrompt = null; $("prompt").value = $("prompt").value.slice(0, $("prompt").value.length - prefix.length) + w + " "; typedOk = $("prompt").value; expected = null; renderSuggestions(); $("prompt").focus(); };
+    $("sugg").appendChild(b);
+  });
+  if (!matches.length) $("sugg").textContent = "no word starts like this";
+}
+
+$("prompt").addEventListener("input", () => {
+  const input = $("prompt");
+  const bad = [...new Set([...input.value].filter(c => !tryInfo.allowed.includes(c)))];
+  if (bad.length) {   // refuse the character: put the text back and say why
+    input.value = [...input.value].filter(c => tryInfo.allowed.includes(c)).join("");
+    showError(`${bad.map(c => "'" + c + "'").join(" ")} not allowed. The model only knows these characters: ${tryInfo.allowed.replace(" ", "space ")}`);
+  } else showError("");
+  if (input.value !== typedOk) { expected = null; genPrompt = null; }
+  typedOk = input.value;
+  renderSuggestions();
+});
+$("prompt").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
+$("model").addEventListener("change", () => setModel($("model").value));
+$("d-model").addEventListener("change", () => setModel($("d-model").value));
+
+$("go").addEventListener("click", () => writeLetters(true));
+$("go-one").addEventListener("click", () => writeLetters(false));
+$("go-reset").addEventListener("click", async () => {
+  if (genPrompt === null) return;
+  $("prompt").value = genPrompt; typedOk = genPrompt; genPrompt = null; renderSuggestions();
+  await afterWrite();
+});
+
+async function fetchGenerate(prompt) {  // greedy completion of the text + the top-5 for the next letter
+  try {
+    const res = await fetch(`/generate?run=${tryRun}&memory=${$("memory").checked ? 1 : 0}&prompt=${encodeURIComponent(prompt)}`);
+    const out = await res.json();
+    if (!res.ok) { showError(out.error); return null; }
+    showError("");
+    return out;
+  } catch (e) { showError("could not reach the dashboard server"); return null; }
+}
+
+let writing = false;
+async function writeLetters(all) {  // the model writes the next letter (or all letters until the end of the story) into the text
+  if (writing || !tryRun) return;
+  writing = true;
+  ["go", "go-one", "fl-one", "fl-all"].forEach(id => { if ($(id)) $(id).disabled = true; });
+  try {
+    const prompt = $("prompt").value;
+    const out = await fetchGenerate(prompt);
+    if (!out) return;
+    let add = out.completion.split("\n")[0];               // stop at the end of the story
+    if (!all) add = add.slice(0, 1);
+    add = add.slice(0, tryInfo.max_prompt - prompt.length);  // the text cannot be longer than T
+    if (add) {
+      if (genPrompt === null) genPrompt = prompt;            // remember where the prompt ends
+      $("prompt").value = prompt + add; typedOk = $("prompt").value; renderSuggestions();
+    }
+    await afterWrite(add ? null : out);
+  } finally {
+    writing = false;
+    ["go", "go-one", "fl-one", "fl-all"].forEach(id => { if ($(id)) $(id).disabled = false; });
+  }
+}
+
+async function afterWrite(out) {  // redraw the answer box, and the letter flow if the window shows it
+  await showTry(out);
+  if (drawer.classList.contains("open") && currentTab === "flow") {
+    stopFlow(); flowJumpToEnd = true; await drawFlow();
+    if (tdata) { flow.l = tdata.L - 1; flow.r = 0; renderFlow(); }
+  }
+}
+
+async function showTry(out) {
+  const text = $("prompt").value;
+  out = out || await fetchGenerate(text);
+  if (!out) return;
+  const P = genPrompt === null ? text.length : genPrompt.length;
+  const ended = out.completion.startsWith("\n"), full = text.length >= tryInfo.max_prompt;
+
+  const answer = $("answer");
+  answer.textContent = "";
+  const p = document.createElement("span"); p.textContent = text.slice(0, P);
+  const g = document.createElement("span"); g.className = "gen"; g.textContent = text.slice(P);
+  answer.append(p, g);
+  if (ended || full) { const end = document.createElement("span"); end.className = "end"; end.textContent = ended ? " ⏎ (end of story: the model stops here)" : " (the text is full)"; answer.append(end); }
+  $("go-reset").style.display = P < text.length ? "" : "none";
+
+  const verdict = $("verdict"), written = text.slice(P);
+  if (expected && written && (written.includes(".") || ended || full)) {
+    const got = written.split(".")[0];
+    verdict.className = got === expected ? "ok" : "no";
+    verdict.textContent = got === expected ? `✓ correct: the answer is "${expected}"` : `✗ the right answer is "${expected}", the model wrote "${got}"`;
+  } else { verdict.className = ""; verdict.textContent = ""; }
+
+  $("probs").innerHTML = out.top.map(t =>
+    `<div class="prob"><span class="name"></span><div class="track"><div class="fill" style="width:${(100 * t.p).toFixed(1)}%"></div></div><span>${(100 * t.p).toFixed(1)}%</span></div>`).join("");
+  [...$("probs").querySelectorAll(".name")].forEach((el, i) => { el.textContent = out.top[i].char; });
+  $("which").textContent = `Black = your prompt, purple = written by the model. Weights saved at step ${out.step} of run ${prettyName(tryRun)}; memory ${$("memory").checked ? "on" : "off"}. Always takes the most likely letter.`;
+  $("result").style.display = "block";
+}
+
+// ---------- start a run ----------
+const NUMBERS = ["steps", "lr", "n", "L", "u", "batch", "seed", "gs_density"];
+const INTS = ["steps", "n", "L", "batch", "seed"];
+let launchCfg = null;
+
+async function initLaunch() {
+  launchCfg = await (await fetch("/config")).json();
+  const d = launchCfg.defaults;
+  NUMBERS.forEach(f => { const el = $("f-" + f); el.value = d[f]; el.min = launchCfg.limits[f][0]; el.max = launchCfg.limits[f][1]; });
+  $("f-level").innerHTML = launchCfg.levels.map(l => `<option>${l}</option>`).join("");
+  $("f-level").value = d.level; $("f-gs").value = d.gs; $("f-norm_a").checked = d.norm_a;
+  updateCommand();
+}
+
+function readParams() {
+  const p = {};
+  NUMBERS.forEach(f => { p[f] = INTS.includes(f) ? parseInt($("f-" + f).value) : parseFloat($("f-" + f).value); });
+  p.level = parseInt($("f-level").value); p.gs = $("f-gs").value; p.norm_a = $("f-norm_a").checked;
+  return p;
+}
+
+function updateCommand() {
+  const p = readParams();
+  $("f-gs_density").disabled = p.gs !== "random";
+  let cmd = `python -m scripts.train --steps ${p.steps} --lr ${p.lr} --level ${p.level} --n ${p.n} --L ${p.L} --u ${p.u} --batch ${p.batch} --seed ${p.seed} --gs ${p.gs} --gs_density ${p.gs_density}`;
+  if (!p.norm_a) cmd += " --no_norm_a";
+  $("cmd").textContent = cmd;
+  // rough guess, calibrated on TINY (about 0.22 s per step at n=128, L=4, batch 8); bigger n costs more
+  const perStep = 0.055 * p.L * (p.batch / 8) * Math.max(1, (p.n / 128) ** 2);
+  const total = perStep * p.steps;
+  $("estimate").textContent = isFinite(total)
+    ? `Rough time guess: about ${perStep.toFixed(2)} s per step, so ${total < 90 ? Math.round(total) + " s" : (total / 60).toFixed(1) + " min"} in total (scaled from TINY, not measured for this size).`
+    : "";
+}
+
+function launchMessage(text, kind) { $("launch-msg").textContent = text; $("launch-msg").className = kind || ""; }
+
+document.querySelector("#launch .form").addEventListener("input", updateCommand);
+$("preset-tiny").onclick = () => { $("f-n").value = 128; updateCommand(); };
+$("preset-small").onclick = () => { $("f-n").value = 256; updateCommand(); };
+$("start").onclick = async () => {
+  launchMessage("starting...", "");
+  const res = await fetch("/launch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(readParams()) });
+  const out = await res.json();
+  if (res.ok) { launchMessage("started: the new run appears in the table below", "ok"); follow = true; $("follow").checked = true; tick(); }
+  else launchMessage(out.error, "err");
+};
+$("stop").onclick = async () => {
+  const out = await (await fetch("/stop", { method: "POST" })).json();
+  launchMessage(out.ok ? "stopped (its weights up to the last 10 steps are saved)" : out.error, out.ok ? "ok" : "err");
+};
+initLaunch();
+
+// ---------- the networks window ----------
+const drawer = $("drawer");
+let currentTab = "flow";
+let wdata = null, wRun = null;       // weights of the chosen model
+const MATS = { Gx_e: "Gx_e: Y → X, excites", Gx_i: "Gx_i: Y → X, inhibits", Gy_e: "Gy_e: A → Y, excites", Gy_i: "Gy_i: A → Y, inhibits" };
+
+let drawerWidth = 470;
+function setDrawerWidth(px) {
+  drawerWidth = Math.max(360, Math.min(px, window.innerWidth));
+  const full = drawerWidth >= window.innerWidth - 1;
+  drawer.style.width = drawerWidth + "px";
+  drawer.classList.toggle("wide", drawerWidth > 800);
+  drawer.classList.toggle("full", full);
+  $("drawer-full").textContent = full ? "exit full" : "full \u26f6";
+  if (drawer.classList.contains("open")) document.body.style.paddingRight = drawerWidth <= window.innerWidth * 0.55 ? (drawerWidth + 20) + "px" : "";
+  $("drawer-wide").textContent = drawerWidth > 800 ? "shrink ⬌" : "expand ⬌";
+}
+function toggleDrawer(open) {
+  drawer.classList.toggle("open", open);
+  document.body.classList.toggle("drawer-open", open);
+  if (open) setDrawerWidth(drawerWidth); else { document.body.style.paddingRight = ""; stopFlow(); }
+  $("drawer-tab").style.display = open ? "none" : "block";
+  if (open) showTab(currentTab);
+}
+$("drawer-tab").onclick = () => toggleDrawer(true);
+$("drawer-close").onclick = () => toggleDrawer(false);
+let widthBeforeFull = 470;
+$("drawer-wide").onclick = () => { setDrawerWidth(drawerWidth > 800 ? 470 : Math.min(1180, window.innerWidth * 0.97)); refitPlots(); };
+let layoutBeforeFull = "1";
+function toggleFull() {
+  const layout = $("d-layout");
+  if (drawer.classList.contains("full")) { setDrawerWidth(widthBeforeFull); layout.value = layoutBeforeFull; }
+  else { widthBeforeFull = drawerWidth; layoutBeforeFull = layout.value; setDrawerWidth(window.innerWidth); layout.value = "2"; }  // a full window has room for 2 columns
+  layout.dispatchEvent(new Event("change"));
+}
+$("drawer-full").onclick = toggleFull;
+window.addEventListener("resize", () => { if (drawer.classList.contains("full")) setDrawerWidth(window.innerWidth); });
+document.addEventListener("keydown", e => {
+  if (!drawer.classList.contains("open")) return;
+  if (e.key === "Escape" && drawer.classList.contains("full")) return toggleFull();
+  if (currentTab !== "flow" || !tdata || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return;
+  if (e.key === "ArrowRight") { e.preventDefault(); stopFlow(); if (flowStep(1)) renderFlow(); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); stopFlow(); if (flowStep(-1)) renderFlow(); }
+  else if (e.key === " ") { e.preventDefault(); $("fl-play").click(); }
+});
+$("d-layout").addEventListener("change", () => { drawer.classList.toggle("cols2", $("d-layout").value === "2"); refitPlots(); });
+const refitPlots = () => setTimeout(() => window.dispatchEvent(new Event("resize")), 300);
+// refit a plot whenever its container changes size (window resized, layout switched, ...)
+const autoFit = el => new ResizeObserver(() => { if (el.data && el.offsetWidth) Plotly.Plots.resize(el); }).observe(el);
+["fl-plot", "g3d", "a-heat", "a-active", "a-sigma"].forEach(id => autoFit($(id)));
+
+// drag the left edge to resize the window
+$("grip").addEventListener("mousedown", e => {
+  e.preventDefault(); $("grip").classList.add("drag"); document.body.classList.add("resizing");
+  const move = ev => setDrawerWidth(window.innerWidth - ev.clientX);
+  const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up);
+                     $("grip").classList.remove("drag"); document.body.classList.remove("resizing"); window.dispatchEvent(new Event("resize")); };
+  document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
+});
+document.querySelectorAll(".dtab").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+async function showTab(name) {
+  currentTab = name;
+  stopFlow();
+  document.querySelectorAll(".dtab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  ["flow", "acts", "weights", "graph"].forEach(t => $("tab-" + t).style.display = t === name ? "block" : "none");
+  if (!tryRun) return;
+  if (name === "flow") drawFlow();
+  if (name === "weights") drawWeights();
+  if (name === "graph") drawGraph();
+  if (name === "acts") drawActivations();
+}
+
+async function getWeights() {
+  if (wRun !== tryRun) {
+    wdata = await (await fetch("/weights?run=" + tryRun)).json(); wRun = tryRun;
+    const diff = (e, i) => e.map((row, j) => row.map((v, c) => v - i[j][c]));  // W = G_e - G_i
+    wdata.Wx = diff(wdata.mats.Gx_e, wdata.mats.Gx_i); wdata.Wy = diff(wdata.mats.Gy_e, wdata.mats.Gy_i);
+  }
+  return wdata;
+}
+
+const plotLayout = (extra = {}) => Object.assign({
+  margin: { l: 40, r: 10, t: 28, b: 36 }, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+  font: { color: css("--fg"), size: 11 } }, extra);
+
+async function drawWeights() {
+  const w = await getWeights();
+  if (!$("wgrid").children.length) {
+    $("wgrid").innerHTML = Object.keys(MATS).map(k => `<div class="wcell"><div id="w-${k}"></div><div class="stat" id="s-${k}"></div></div>`).join("");
+    Object.keys(MATS).forEach(k => autoFit($("w-" + k)));
+  }
+  for (const [k, title] of Object.entries(MATS)) {
+    const z = w.mats[k], flat = z.flat();
+    Plotly.react("w-" + k, [{ z, type: "heatmap", colorscale: "Viridis", hovertemplate: "receives: neuron %{y}<br>sends: neuron %{x}<br>strength %{z:.3f}<extra></extra>" }],
+      plotLayout({ title: { text: title, font: { size: 13 } }, height: 300,
+                   xaxis: { title: "sender neuron" }, yaxis: { title: "receiver", autorange: "reversed" } }), { displayModeBar: false, responsive: true });
+    const mean = flat.reduce((a, b) => a + b, 0) / flat.length;
+    $("s-" + k).textContent = `mean ${mean.toFixed(3)}, max ${Math.max(...flat).toFixed(3)}, ${(100 * flat.filter(v => v < 0.001).length / flat.length).toFixed(1)}% of the wires are ~0`;
+  }
+}
+
+function sphere(n) {  // n points spread evenly on a sphere
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const y = 1 - 2 * (i + 0.5) / n, r = Math.sqrt(1 - y * y), th = i * Math.PI * (3 - Math.sqrt(5));
+    pts.push([r * Math.cos(th), y, r * Math.sin(th)]);
+  }
+  return pts;
+}
+
+async function drawGraph() {
+  const w = await getWeights();
+  const name = $("g-mat").value, k = parseInt($("g-k").value), z = w.mats[name], n = w.n;
+  $("g-kval").textContent = k;
+  const pos = sphere(n), edges = [];
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) if (i !== j) edges.push([z[j][i], i, j]);  // i sends to j
+  edges.sort((a, b) => b[0] - a[0]);
+  const top = edges.slice(0, k), degree = new Array(n).fill(0);
+  const ex = [], ey = [], ez = [];
+  top.forEach(([v, i, j]) => { degree[i] += v; degree[j] += v; ex.push(pos[i][0], pos[j][0], null); ey.push(pos[i][1], pos[j][1], null); ez.push(pos[i][2], pos[j][2], null); });
+  const maxDeg = Math.max(...degree, 1e-9), color = css(name.endsWith("_e") ? "--c2" : "--c5");
+  Plotly.react("g3d", [
+    { type: "scatter3d", mode: "lines", x: ex, y: ey, z: ez, line: { color, width: 2 }, opacity: 0.55, hoverinfo: "skip", name: "wires" },
+    { type: "scatter3d", mode: "markers", x: pos.map(p => p[0]), y: pos.map(p => p[1]), z: pos.map(p => p[2]),
+      marker: { size: degree.map(d => 3 + 9 * d / maxDeg), color: css("--c0"), opacity: 0.9 }, text: pos.map((_, i) => `neuron ${i}`), hoverinfo: "text", name: "neurons" },
+  ], plotLayout({ margin: { l: 0, r: 0, t: 0, b: 0 }, showlegend: false,
+                  scene: { xaxis: { visible: false }, yaxis: { visible: false }, zaxis: { visible: false }, aspectmode: "cube" } }),
+  { displayModeBar: false, responsive: true });
+}
+$("g-mat").addEventListener("change", drawGraph);
+$("g-k").addEventListener("input", drawGraph);
+
+let tdata = null, traceKey = "";   // the last trace of the text in "Try a model"
+async function loadTrace(msgEl) {
+  if (!$("prompt").value && tryInfo) { $("prompt").value = tryInfo.examples[0].prompt; typedOk = $("prompt").value; expected = tryInfo.examples[0].answer; renderSuggestions(); }
+  const prompt = $("prompt").value;
+  if (!prompt) { msgEl.textContent = 'type a text (or click an example) in "Try a model" first'; return false; }
+  const key = `${tryRun}|${$("memory").checked}|${prompt}`;
+  if (key === traceKey && tdata) return true;
+  msgEl.textContent = "computing...";
+  const res = await fetch(`/trace?run=${tryRun}&memory=${$("memory").checked ? 1 : 0}&prompt=${encodeURIComponent(prompt)}`);
+  const out = await res.json();
+  if (!res.ok) { msgEl.textContent = out.error; return false; }
+  tdata = out; traceKey = key;
+  msgEl.textContent = `${out.letters.length} letters, memory ${$("memory").checked ? "on" : "off"}`;
+  return true;
+}
+
+async function drawActivations() {
+  if (!(await loadTrace($("a-msg")))) return;
+  const fill = (id, n) => { const sel = $(id), keep = sel.value; sel.innerHTML = Array.from({ length: n }, (_, i) => `<option value="${i}">${i}</option>`).join(""); sel.value = keep || n - 1; };
+  fill("a-layer", tdata.L); fill("a-slayer", tdata.L);
+  renderActivations();
+}
+
+function renderActivations() {
+  if (!tdata) return;
+  const what = $("a-what").value, layer = parseInt($("a-layer").value), z = tdata[what][layer];
+  const labels = tdata.letters.map((c, t) => `${t} ${c === " " ? "␣" : c}`);
+  $("a-letters").textContent = "rows: " + tdata.letters.map(c => c === " " ? "␣" : c).join("");
+  Plotly.react("a-heat", [{ z, y: labels, type: "heatmap", colorscale: "Viridis", hovertemplate: "letter %{y}<br>neuron %{x}: %{z:.3f}<extra></extra>" }],
+    plotLayout({ height: Math.max(300, 13 * labels.length + 70), xaxis: { title: "neuron" }, yaxis: { autorange: "reversed", type: "category", tickfont: { size: 9 } },
+                 title: { text: `${what} at layer ${layer}`, font: { size: 13 } } }), { displayModeBar: false, responsive: true });
+  const active = tdata.x[layer].map(row => row.filter(v => v > 0).length);
+  Plotly.react("a-active", [{ x: labels, y: active, type: "bar", marker: { color: css("--c0") }, hovertemplate: "%{x}: %{y} neurons active<extra></extra>" }],
+    plotLayout({ height: 200, yaxis: { title: "active neurons (x > 0)", range: [0, tdata.n] }, xaxis: { type: "category", tickfont: { size: 8 } },
+                 title: { text: "how many neurons fire per letter", font: { size: 13 } } }), { displayModeBar: false, responsive: true });
+  const sl = parseInt($("a-slayer").value);
+  Plotly.react("a-sigma", [{ z: tdata.sigma[sl], type: "heatmap", colorscale: "Viridis", hovertemplate: "from neuron %{y}, to neuron %{x}: %{z:.3f}<extra></extra>" }],
+    plotLayout({ height: 340, xaxis: { title: "to j" }, yaxis: { title: "from i", autorange: "reversed" },
+                 title: { text: `memory sigma, layer ${sl}, after the whole text`, font: { size: 13 } } }), { displayModeBar: false, responsive: true });
+}
+// ---------- letter flow: the 4 rounds of one layer for one letter ----------
+const flow = { t: 0, l: 0, r: 0, timer: null };
+const STEP_SHORT = ["push X", "read σ", "write σ", "A → Y"];                       // k = 0..3, in the order the code runs them
+const STEP_LONG = ["Y pushes X", "read memory", "write memory", "A pushes Y"];
+const TABLE_OFFSET = [3, 0, 1, 2];  // CLAUDE.md numbers: push X = 4l+3, read = 4l, write = 4l+1, A pushes Y = 4l+2
+function roundId(l, k) {            // the name and the number of one round, in the numbering chosen on the page
+  const off = $("fl-num").value === "table" ? TABLE_OFFSET[k] : k;
+  return { formula: off ? `4l+${off}` : "4l", number: 4 * l + off };
+}
+const ROWS = { yin: { y: 3, label: "Y in", color: "--c1" }, x: { y: 2, label: "X", color: "--c0" },
+               a: { y: 1, label: "A", color: "--c3" }, yout: { y: 0, label: "Y out", color: "--c1" } };
+let flowKey = "";
+const showChar = c => c === " " ? "␣" : c;
+const byteChar = b => b === 32 ? "\u2423" : b === 10 ? "\u23ce" : (b > 32 && b < 127 ? String.fromCharCode(b) : "?");
+const byteName = b => b === 32 ? "space" : b === 10 ? "end of story" : (b > 32 && b < 127 ? "\"" + String.fromCharCode(b) + "\"" : "byte " + b);
+let genPrompt = null;   // the prompt as typed, once the model has started adding letters (null = nothing generated)
+let flowJumpToEnd = false;   // after "append the prediction": go to the new last letter
+
+$("fl-ruler").addEventListener("click", e => {
+  const cell = e.target.closest(".rcell");
+  if (cell) { stopFlow(); flow.l = parseInt(cell.dataset.l); flow.r = parseInt(cell.dataset.k); renderFlow(); }
+});
+$("fl-num").addEventListener("change", () => renderFlow());
+
+function renderRuler() {  // one box per layer, 4 cells each: the round number and what happens
+  const here = 4 * flow.l + flow.r;
+  $("fl-ruler").innerHTML = Array.from({ length: tdata.L }, (_, l) =>
+    `<div class="rgroup"><div class="gl">layer l = ${l}</div><div class="rcells">` +
+    [0, 1, 2, 3].map(k => {
+      const id = roundId(l, k), at = 4 * l + k;
+      return `<button class="rcell ${at === here ? "active" : at < here ? "done" : ""}" data-l="${l}" data-k="${k}"><b>${id.formula}</b>= ${id.number}<br>${STEP_SHORT[k]}</button>`;
+    }).join("") + `</div></div>`).join("");
+}
+
+function renderPrediction() {  // the output head applied to x: which letter comes next?
+  const { t, l } = flow, L = tdata.L, T = tdata.letters.length, top = tdata.pred[l][t], isFinal = l === L - 1, last = t === T - 1;
+  const trueByte = last ? null : tdata.letters[t + 1].charCodeAt(0);
+  const bars = top.map(([b, p]) => `<div class="prob ${b === trueByte ? "true" : ""}"><span class="name"></span><div class="track"><div class="fill" style="width:${(100 * p).toFixed(1)}%"></div></div><span>${(100 * p).toFixed(1)}%</span></div>`).join("");
+  const why = isFinal
+    ? "<b>This is the real prediction.</b> After the last layer pushes X, x does not change any more: <code>head(x)</code> gives the scores for the next letter, and training scores exactly this."
+    : `If we stopped after layer ${l} and read x through the output head, this is the guess so far. The real prediction comes after layer ${L - 1}.`;
+  const truth = last ? `The text ends here: this is a real prediction of letter ${T}.`
+    : t + 1 >= (genPrompt === null ? T : genPrompt.length) ? `The next letter, ${byteName(trueByte)}, was <b>written by the model</b> earlier (its own top choice): it is not a test, just the chain of its guesses.`
+    : `The text continues with ${byteName(trueByte)}: the model gives it <b>${(100 * (tdata.p_next[l][t] || 0)).toFixed(1)}%</b>${top[0][0] === trueByte ? " (its top choice)" : ""}.`;
+  $("fl-pred").innerHTML = `<div class="small">Prediction for letter ${t + 1}, from x after layer ${l}</div>${bars}<div class="small">${why}</div><div class="small">${truth}</div>` +
+    (last && !isFinal ? `<div class="small">Go to the last layer (layer ${L - 1}) to add this letter to the text.</div>` : "") +
+    (last && isFinal && top[0][0] !== 10 ? `<button class="chip" id="fl-append">add ${byteName(top[0][0])} to the text and continue</button>` : "");
+  [...$("fl-pred").querySelectorAll(".name")].forEach((el, i) => { el.textContent = byteName(top[i][0]); });
+  const btn = $("fl-append");
+  if (btn) btn.onclick = () => writeLetters(false);
+}
+
+function cycleSvg(k) {  // the loop Y -> X -> memory -> A -> Y, with the arrows of the current round lit
+  const on = (...ks) => ks.includes(k);
+  const arrow = (d, lit, dashed) => `<path d="${d}" fill="none" stroke="${lit ? "var(--c2)" : "var(--line)"}" stroke-width="${lit ? 3 : 1.6}"` +
+    ` marker-end="url(#${lit ? "ah1" : "ah0"})"${dashed ? ' stroke-dasharray="5 3"' : ""}/>`;
+  const node = (cx, cy, color, label) => `<circle cx="${cx}" cy="${cy}" r="20" style="fill:var(${color})"/><text class="node" x="${cx}" y="${cy + 5}">${label}</text>`;
+  return `<svg viewBox="0 0 300 205" role="img" aria-label="the four rounds as a loop">
+    <defs>
+      <marker id="ah0" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--muted)"/></marker>
+      <marker id="ah1" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--c2)"/></marker>
+    </defs>
+    ${arrow("M 68 40 L 228 40", on(0))}
+    ${arrow("M 62 58 L 112 84", on(2), true)}
+    ${arrow("M 240 58 L 190 84", on(1, 2), on(2))}
+    ${arrow("M 150 118 L 150 150", on(1))}
+    ${arrow("M 132 164 Q 30 160 40 64", on(3))}
+    <rect x="108" y="82" width="84" height="38" rx="8" style="fill:var(--c4);fill-opacity:.18;stroke:var(--c4)"/>
+    <text x="150" y="105" style="text-anchor:middle;fill:var(--c4);font-weight:700;font-size:12px">σ[l]</text>
+    ${node(45, 40, "--c1", "Y")}${node(255, 40, "--c0", "X")}${node(150, 172, "--c3", "A")}
+    <text class="${on(0) ? "on" : ""}" x="148" y="31" text-anchor="middle">push / pull through Gx</text>
+    <text class="${on(2) ? "on" : ""}" x="84" y="64">write y⊗x</text>
+    <text class="${on(1) ? "on" : ""}" x="196" y="140">read a = σ·x</text>
+    <text class="${on(3) ? "on" : ""}" x="8" y="148" >Gy, gated by x</text>
+  </svg>`;
+}
+
+async function drawFlow() {
+  if (!(await loadTrace($("fl-msg")))) return;
+  await getWeights();
+  if (flowKey !== traceKey) {  // a new text or model: rebuild the letter strip and the layer list
+    if (genPrompt !== null && !$("prompt").value.startsWith(genPrompt)) genPrompt = null;   // the user typed something else
+    const P = genPrompt === null ? tdata.letters.length : genPrompt.length;   // letters before this index are the prompt
+    flowKey = traceKey; Object.assign(flow, { t: flowJumpToEnd ? tdata.letters.length - 1 : 0, l: 0, r: 0 }); flowJumpToEnd = false;
+    $("fl-letters").innerHTML = "";
+    tdata.letters.forEach((c, t) => {
+      const b = document.createElement("button");
+      b.className = "lt" + (t >= P ? " gen" : "") + (t === P && P > 0 ? " sep" : "");
+      const guess = tdata.pred[tdata.L - 1][t][0][0];              // the model's top-1 guess for the letter after this one
+      const last = t === tdata.letters.length - 1;
+      const right = !last && guess === tdata.letters[t + 1].charCodeAt(0);
+      b.title = (t >= P ? "written by the model. " : "from your prompt. ") + `letter ${t} "${c}": after reading it, the model predicts ${byteName(guess)}` + (last ? "" : `; the text continues with "${tdata.letters[t + 1]}"`);
+      const top = document.createElement("span"); top.className = "lc"; top.textContent = showChar(c);
+      const bot = document.createElement("span"); bot.className = "pc " + (last ? "q" : right ? "ok" : "bad"); bot.textContent = byteChar(guess);
+      b.append(top, bot);
+      b.onclick = () => { stopFlow(); flow.t = t; flow.r = 0; renderFlow(); };
+      $("fl-letters").appendChild(b);
+    });
+    const gen = tdata.letters.slice(P).join("");
+    $("fl-split").innerHTML = `<span class="tag p">prompt</span> <code>${showChar(tdata.letters.slice(0, P).join("")).replace(/ /g, "␣")}</code>` +
+      (gen ? ` &nbsp;<span class="tag g">written by the model</span> <code>${gen.replace(/ /g, "␣")}</code> <button class="chip" id="fl-reset">remove the model's letters</button>` : ` &nbsp;<span class="small">(the model has written nothing yet)</span>`);
+    $("fl-split").innerHTML += ` <button class="chip" id="fl-one" title="the model writes one more letter">&#9654; next letter</button> <button class="chip" id="fl-all" title="the model writes letters until the end of the story">&#9654;&#9654; all letters</button>`;
+    $("fl-one").onclick = () => writeLetters(false);
+    $("fl-all").onclick = () => writeLetters(true);
+    const rb = $("fl-reset");
+    if (rb) rb.onclick = () => $("go-reset").click();
+    $("fl-layer").innerHTML = Array.from({ length: tdata.L }, (_, i) => `<option value="${i}">layer ${i}</option>`).join("");
+  }
+  renderFlow();
+}
+
+function flowStep(dir) {  // go to the next (or previous) round, then layer, then letter. false at the end.
+  if (dir > 0) {
+    if (flow.r < 3) flow.r++;
+    else if (flow.l < tdata.L - 1) { flow.r = 0; flow.l++; }
+    else if (flow.t < tdata.letters.length - 1) { flow.r = 0; flow.l = 0; flow.t++; }
+    else return false;
+  } else {
+    if (flow.r > 0) flow.r--;
+    else if (flow.l > 0) { flow.r = 3; flow.l--; }
+    else if (flow.t > 0) { flow.r = 3; flow.l = tdata.L - 1; flow.t--; }
+    else return false;
+  }
+  return true;
+}
+function stopFlow() { if (flow.timer) { clearInterval(flow.timer); flow.timer = null; } $("fl-play").textContent = "▶ play"; }
+$("fl-next").onclick = () => { stopFlow(); if (tdata && flowStep(1)) renderFlow(); };
+$("fl-prev").onclick = () => { stopFlow(); if (tdata && flowStep(-1)) renderFlow(); };
+$("fl-play").onclick = () => {
+  if (flow.timer) return stopFlow();
+  if (!tdata) return;
+  $("fl-play").textContent = "❚❚ pause";
+  flow.timer = setInterval(() => { if (flowStep(1)) renderFlow(); else stopFlow(); }, 1100);
+};
+$("fl-layer").addEventListener("change", () => { flow.l = parseInt($("fl-layer").value); renderFlow(); });
+$("fl-k").addEventListener("input", renderFlow);
+
+function topEdges(W, src, k) {  // wire i -> j carries W[j][i] * src[i]; keep the k strongest
+  const list = [], n = src.length;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const v = W[j][i] * src[i]; if (v !== 0) list.push({ i, j, v }); }
+  return list.sort((p, q) => Math.abs(q.v) - Math.abs(p.v)).slice(0, k);
+}
+
+function edgeTraces(edges, rowFrom, rowTo, colorPos, colorNeg) {  // 3 widths x 2 signs: a few traces, not one per wire
+  const mx = Math.max(...edges.map(e => Math.abs(e.v)), 1e-9), traces = [];
+  for (const sign of [1, -1]) for (let b = 0; b < 3; b++) {
+    const sel = edges.filter(e => Math.sign(e.v) === sign && Math.min(2, Math.floor(3 * Math.abs(e.v) / mx)) === b);
+    if (!sel.length) continue;
+    traces.push({ type: "scatter", mode: "lines", hoverinfo: "skip", showlegend: false, opacity: 0.8,
+      x: sel.flatMap(e => [e.i, e.j, null]), y: sel.flatMap(() => [rowFrom, rowTo, null]),
+      line: { color: css(sign > 0 ? colorPos : colorNeg), width: [1, 2.4, 4.2][b] } });
+  }
+  return traces;
+}
+
+function rowTrace(row, vals, name) {
+  const mx = Math.max(...vals, 1e-9);
+  return { type: "scatter", mode: "markers", showlegend: false, hoverinfo: "text",
+    x: vals.map((_, i) => i), y: vals.map(() => row.y),
+    marker: { size: vals.map(v => v > 0 ? 6 + 16 * v / mx : 3), color: vals.map(v => v > 0 ? css(row.color) : css("--line")) },
+    text: vals.map((v, i) => `${name}(${i}) = ${v.toFixed(3)}`) };
+}
+
+function renderFlow() {
+  if (!tdata || !wdata) return;
+  const { t, l, r } = flow, n = tdata.n, k = parseInt($("fl-k").value);
+  $("fl-kval").textContent = k; $("fl-layer").value = l;
+  document.querySelectorAll("#fl-letters .lt").forEach((b, i) => { b.classList.toggle("done", i < t); b.classList.toggle("now", i === t); b.classList.toggle("next", i > t); });
+  renderRuler();
+
+  const x = tdata.x[l][t], a = tdata.a[l][t], yout = tdata.y[l][t], yin = tdata.y_in[l][t];
+  const dot = (W, v, j) => { let s = 0; for (let i = 0; i < n; i++) s += W[j][i] * v[i]; return s; };
+  const zx = x.map((_, j) => dot(wdata.Wx, yin, j));  // net push on X(j) from all Y(i)
+  const zy = x.map((_, j) => dot(wdata.Wy, a, j));    // net push on Y(j) from all A(i)
+  const count = (arr, f) => arr.filter(f).length;
+
+  const traces = [], shapes = [], notes = [];
+  let edges = [], topHtml = "", text = "";
+  if (r === 0) {
+    edges = topEdges(wdata.Wx, yin, k);
+    traces.push(...edgeTraces(edges, ROWS.yin.y, ROWS.x.y, "--c2", "--c5"));
+  } else if (r === 2) {
+    const Gs = wdata.mats.Gs;
+    edges = [];
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const v = yin[i] * x[j] * Gs[i][j]; if (v > 0) edges.push({ i, j, v }); }
+    edges = edges.sort((p, q) => q.v - p.v).slice(0, k);
+    traces.push(...edgeTraces(edges, ROWS.yin.y, ROWS.x.y, "--c4", "--c4"));
+  } else if (r === 3) {
+    edges = topEdges(wdata.Wy, a, k);
+    traces.push(...edgeTraces(edges, ROWS.a.y, ROWS.yout.y, "--c2", "--c5"));
+  }
+  if (r === 1) shapes.push({ type: "rect", xref: "paper", x0: 0, x1: 1, y0: 1.18, y1: 1.82, fillcolor: css("--c4"), opacity: 0.13, line: { width: 0 } });
+
+  traces.push(rowTrace(ROWS.yin, yin, "Y in"), rowTrace(ROWS.x, x, "X"));
+  if (r >= 1) traces.push(rowTrace(ROWS.a, a, "A"));
+  if (r >= 3) traces.push(rowTrace(ROWS.yout, yout, "Y out"));
+  const ring = (row, idx, label) => ({ type: "scatter", mode: "markers", showlegend: false, hoverinfo: "text", x: idx, y: idx.map(() => row.y),
+    marker: { size: 11, color: "rgba(0,0,0,0)", line: { color: css("--c5"), width: 2 } }, text: idx.map(j => label(j)) });
+  if (r === 0) traces.push(ring(ROWS.x, x.map((_, j) => j).filter(j => zx[j] < 0), j => `X(${j}): net pull z = ${zx[j].toFixed(3)} -> cut to 0`));
+  if (r === 3) {
+    traces.push(ring(ROWS.yout, x.map((_, j) => j).filter(j => zy[j] < 0), j => `Y out(${j}): net pull z = ${zy[j].toFixed(3)} -> cut to 0`));
+    const blocked = x.map((_, j) => j).filter(j => zy[j] > 0 && x[j] === 0);
+    traces.push({ type: "scatter", mode: "markers", showlegend: false, hoverinfo: "text", x: blocked, y: blocked.map(() => ROWS.yout.y),
+      marker: { symbol: "x", size: 9, color: css("--muted") }, text: blocked.map(j => `Y out(${j}): pushed (${zy[j].toFixed(3)}) but X(${j}) = 0, so blocked`) });
+  }
+
+  const letter = tdata.letters[t];
+  const nYin = count(yin, v => v > 0), nX = count(x, v => v > 0), nA = count(a, v => v > 0), nY = count(yout, v => v > 0);
+  const fmt3 = v => (v >= 0 ? "+" : "") + v.toFixed(3);
+  const wires = (label, cls, f) => edges.slice(0, 8).map(e => `<div class="${cls}">${f(e)}</div>`).join("") || "<div>(nothing to show)</div>";
+  if (r === 0) {
+    text = `<b>Y pushes X.</b> ${nYin} Y neurons fire for the letter "${showChar(letter)}". Through the wires they push ${count(zx, v => v > 0)} X neurons up (they become active) and pull ${count(zx, v => v < 0)} down (cut to 0 by the ReLU, red rings).${l > 0 ? " X also keeps what the earlier layers put there." : ""}`;
+    topHtml = "Strongest wires (Y → X):" + wires("", "", e => `<span class="${e.v > 0 ? "push" : "pull"}">Y(${e.i}) → X(${e.j}) ${fmt3(e.v)}</span>`);
+  } else if (r === 1) {
+    text = !$("memory").checked ? `<b>Read memory.</b> Memory is off (Gs = 0): nothing is ever written into σ, so A is always zero.`
+      : a.some(v => v !== 0) ? `<b>Read memory.</b> The ${nX} active X neurons query the memory σ (a = σ · x): it returns ${nA} non-zero A values.`
+      : `<b>Read memory.</b> a = σ · x. Nothing has been written into the memory yet (this is the first letter), so A is all zero.`;
+    const order = a.map((v, i) => [v, i]).sort((p, q) => q[0] - p[0]).slice(0, 8).filter(p => p[0] > 0);
+    topHtml = "Largest A values:" + (order.map(([v, i]) => `<div class="mem">A(${i}) = ${v.toFixed(3)}</div>`).join("") || "<div>(none)</div>");
+  } else if (r === 2) {
+    text = `<b>Write memory.</b> σ ← u · (σ + y ⊗ x). Every pair of an active Y in neuron (${nYin}) and an active X neuron (${nX}) strengthens the memory link between them: neurons that fire together are linked. The read of this letter happened before this write.`;
+    topHtml = "Strongest new memory links (Y in → X):" + wires("", "mem", e => `Y(${e.i}) → X(${e.j}) ${e.v.toFixed(3)}`);
+  } else {
+    text = !a.some(v => v !== 0) ? `<b>A pushes Y.</b> A is all zero (the memory returned nothing), so nothing is pushed and no Y neuron comes out of this layer.` : `<b>A pushes Y.</b> y = relu(Wy · a) · x. A pushes ${count(zy, v => v > 0)} neurons up and pulls ${count(zy, v => v < 0)} down; then X gates the result: only neurons that are also active in X survive (grey crosses = pushed but blocked). ${nY} Y neurons come out and go into the next layer${l === tdata.L - 1 ? " (this is the last layer: the prediction is read from X)" : ""}.`;
+    topHtml = "Strongest wires (A → Y):" + wires("", "", e => `<span class="${e.v > 0 ? "push" : "pull"}">A(${e.i}) → Y(${e.j}) ${fmt3(e.v)}</span>`);
+  }
+  const rid = roundId(l, r), T = tdata.letters.length, per = 4 * tdata.L;
+  const uses = ["the wires <b>Gx</b> (Gx_e − Gx_i)", `the memory <b>σ[${l}]</b>`, "the mask <b>Gs</b> and the decay <b>u</b>", "the wires <b>Gy</b> (Gy_e − Gy_i) and the gate <b>X</b>"][r];
+  const memory = !$("memory").checked ? "nothing (memory off)"
+    : r < 2 ? (t === 0 ? "nothing yet" : `letters 0 to ${t - 1}`)
+    : r === 2 ? `letters 0 to ${t - 1}, and letter ${t} is being written now` : `letters 0 to ${t}`;
+  $("fl-where").innerHTML = `Now: letter <b>${t}</b> "${showChar(letter)}" (byte ${letter.charCodeAt(0)}, letter ${t + 1} of ${T}) · layer <b>${l}</b> · round <b>${rid.formula} = ${rid.number}</b>, ${STEP_LONG[r]}` +
+    `<br>Memory σ[${l}] holds: ${memory} · step ${t * per + 4 * l + r + 1} of ${T * per}`;
+  $("fl-cycle").innerHTML = cycleSvg(r);
+  renderPrediction();
+  $("fl-text").innerHTML = `<div class="small">Round ${rid.formula} = ${rid.number} uses ${uses}</div>` + text;
+  $("fl-top").innerHTML = topHtml;
+
+  const layout = plotLayout({
+    height: 400, margin: { l: 56, r: 8, t: 8, b: 30 }, shapes,
+    xaxis: { range: [-2, n + 1], title: { text: "neuron index i", font: { size: 11 } }, zeroline: false, showgrid: false },
+    yaxis: { range: [-0.6, 3.6], visible: false },
+    annotations: Object.entries(ROWS).map(([key, row]) => {  // rows that come in a later round are shown dimmed
+      const shown = key === "yin" || key === "x" || (key === "a" && r >= 1) || (key === "yout" && r >= 3);
+      return { xref: "paper", x: 0, y: row.y, xanchor: "right", showarrow: false, text: shown ? `<b>${row.label}</b>` : row.label,
+               font: { color: shown ? css(row.color) : css("--line"), size: 12 } };
+    }),
+  });
+  if (r === 1) layout.annotations.push({ xref: "paper", yref: "y", x: 0.5, y: 1.5, showarrow: false, text: `memory σ[${l}]: a = σ · x`, font: { size: 12, color: css("--c4") } });
+  Plotly.react("fl-plot", traces, layout, { displayModeBar: false, responsive: true });
+}
+
+$("a-run").onclick = drawActivations;
+["a-what", "a-layer", "a-slayer"].forEach(id => $(id).addEventListener("change", renderActivations));
+
+tick();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
